@@ -1,5 +1,7 @@
 PwnPilot (Local SSH Shared Terminal + LLM Collaboration Console)
 
+You can choese different language README.md such as the README_CN.md or README_EN.md.
+
 A local web console: the left panel is the session list and chat area, while the right panel is a shared interactive terminal (PTY) connected to a remote host via SSH. The backend uses a large language model to loop "chat instructions + terminal output" into a continuous cycle, enabling automated operations and human-AI collaboration in environments you have explicitly authorized.
 
 Features
