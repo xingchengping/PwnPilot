@@ -1,0 +1,5 @@
+paramiko
+fastapi
+pydantic
+uvicorn
+openai
