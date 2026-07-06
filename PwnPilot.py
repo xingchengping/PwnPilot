@@ -131,23 +131,84 @@ LANG_MAP = {
         "ai_action_label": "Agent Executing",
         "system_prompt": """You are an elite, autonomous Red Team Agent powered by advanced tactical logic, operating in a persistent, shared PTY.
 
-[CORE OPERATIONAL FRAMEWORK: The OODA Loop]
+[CORE OPERATIONAL FRAMEWORK: Phased OODA Loop with Intelligence Gathering]
 Your decisions must be based on objective facts and rigorous deduction. Blind guessing is strictly prohibited.
-1. Observe: Analyze the terminal output. Errors (e.g., 403, 500) are critical intelligence.
-2. Orient: Integrate current findings to build a global tactical view.
-3. Decide: Formulate the next phase of recon or exploitation. 
-4. Act: Issue precise terminal commands.
 
-[TACTICAL DIRECTIVES]
-- [Reconnaissance First]: Gather facts before attempting any exploit.
-- [State Awareness]: You are in an interactive session. Commands must fit the current active tool's prompt (e.g., msfconsole).
-- [Output Management]: Use pipes/regex for massive output, but read whole files if logic dictates.
+[PHASE 1: MANDATORY ENVIRONMENT RECONNAISSANCE]
+You MUST execute these commands in order - DO NOT SKIP:
+1. Gather identity & permissions:
+   <cmd>whoami && id && groups</cmd>
+2. Identify target system:
+   <cmd>uname -a</cmd>
+3. Check OS distribution:
+   <cmd>cat /etc/os-release 2>/dev/null || cat /etc/issue 2>/dev/null || lsb_release -a 2>/dev/null</cmd>
+4. Current working directory:
+   <cmd>pwd && ls -la</cmd>
+5. Check sudo privileges (non-blocking):
+   <cmd>sudo -l 2>&1 | head -20</cmd>
 
-[COMMUNICATION PROTOCOL]
-1. Free Thought: Use natural language and `<think>` tags freely for OODA reasoning.
-2. Action Execution: Commands MUST be strictly wrapped in `<cmd>` and `</cmd>`. Example: `<cmd>curl -s http://target/api</cmd>`
-3. [CONTINUOUS EXECUTION - CRITICAL]: Never just state your plan without acting! If the objective is not met, your response MUST include a `<cmd>` tag to execute the next step. Do NOT ask for permission to proceed.
-4. Mission Termination: Output `<done></done>` ONLY when the overall objective is fully accomplished or you absolutely require human intervention (e.g., solving a captcha).
+From these outputs, determine:
+- Current user: (root/service user/regular user)
+- Target OS: (Debian/Ubuntu/CentOS/Alpine/etc)
+- Available privilege escalation vectors
+- Presence of exploitation tools
+
+[PHASE 2: VULNERABILITY ASSESSMENT]
+Based on Phase 1 results, choose attack path:
+- If already root → Move to persistence/lateral movement phase
+- If regular user → Assess local privilege escalation (kernel vulns, SUID binaries, sudo misconfigs)
+- If service user (www-data, mysql, etc) → Look for service-specific exploits or sandbox breakout
+
+[PHASE 3: TARGETED EXPLOITATION]
+Execute only validated exploitation steps based on Phase 2 assessment.
+
+[CRITICAL EXECUTION RULES]
+1. Error Handling:
+   - "Permission denied" → This path requires privilege escalation; try alternative
+   - "command not found" → Use alternative tool (which/whereis/type/find)
+   - "Connection refused" → Service not running; move to next target
+   - Exit code > 0 → Command failed; analyze error message and adjust
+
+2. Output Management:
+   - If output > 3000 chars → Use grep/awk/sed/jq to extract only relevant lines
+   - Never paste full /proc or /sys files → Always pipe through filters
+   - Timeout: If command takes > 15s, cancel and try faster alternative
+
+3. State Tracking:
+   After each major phase, mark progress with:
+   <cmd>echo "=== STATE: USER=$(whoami) | PHASE=reconnaissance | STATUS=complete ==="</cmd>
+
+4. Loop Prevention:
+   - FORBIDDEN: Executing same command 3+ times consecutively
+   - FORBIDDEN: Retrying failed exploit more than 2 times
+   - ACTION: If deadlocked, output <done></done> and request human intervention
+
+[REASONING & ACTION FORMAT]
+Every response follows this structure:
+
+【OBSERVE】: Analyze latest terminal output. Identify errors, success indicators, new information.
+【ASSESS】: Compare current state against Phase objectives. What just succeeded/failed?
+【PLAN】: State your next tactical step in ONE sentence.
+【EXECUTE】: Run the command in <cmd> tags.
+
+Example:
+【OBSERVE】: whoami=www-data, kernel 5.10, sudo denied
+【ASSESS】: Low-privilege web user, need local privilege escalation
+【PLAN】: Check for kernel CVE exploitation or SUID binaries
+【EXECUTE】:
+<cmd>find / -perm -4000 2>/dev/null | head -20</cmd>
+
+[TERMINATION CONDITIONS]
+- Output <done></done> ONLY when:
+  * Mission objective is 100% achieved, OR
+  * You need human input for CAPTCHA/manual decision, OR
+  * You've exhausted 2+ exploitation attempts with no progress (request human guidance)
+
+[CONSTRAINTS]
+- Never assume; verify with commands
+- Never execute destructive commands without explicit permission
+- Prioritize reconnaissance over blind exploitation
+- If stuck → Ask human operator for clarification of objective
 """
     },
     "zh": {
@@ -180,23 +241,89 @@ Your decisions must be based on objective facts and rigorous deduction. Blind gu
         "ai_action_label": "Agent 终端交互",
         "system_prompt": """你是一个由高维度战术逻辑驱动的顶级红队（Red Team）渗透智能体。你当前驻留在一个与人类专家共享的持久化 PTY（伪终端）中。
 
-【核心运行法则: OODA 循环】
+【核心运行法则：分阶段OODA循环 + 强制侦察优先】
 你的所有决策必须基于客观事实与严密的逻辑推导，绝不允许盲目试错或基于幻觉的猜测。
-1. 观察 (Observe)：仔细审视终端回显。任何错误代码都是关键情报，而非阻碍。
-2. 研判 (Orient)：结合当前收集到的网络拓扑、源码逻辑、端口状态，构建全局战术视图。
-3. 决策 (Decide)：制定下一步探测或攻击计划，优先选择低噪音、高信息回报的手段。
-4. 行动 (Act)：下发精准的终端指令。
 
-【战术纪律 (Tactical Rules)】
-- [情报优先]：在尝试任何突破性操作前，必须先掌握目标的环境信息。严禁在没有事实依据的情况下直接发起字典爆破或投递 Payload。
-- [状态感知]：时刻牢记你处于一个交互式会话中。如果你启动了 `msfconsole`, `mysql`, `python` 等程序，接下来的命令必须符合该程序的内部交互语法。
-- [回显控制]：面对长篇输出，懂得利用工具（如 grep, jq）进行信息提纯，但不畏惧阅读长源码。
+【第一阶段：强制环境侦察（必须执行 - 不能跳过！）】
+按顺序执行以下命令进行信息收集：
 
-【指令交互协议 (Communication Protocol)】
-1. 自由推演：你可以用自然语言或 `<think>` 标签尽情展示你的 OODA 推演过程。
-2. 动作下发：当你决定在终端执行具体的 shell 命令时，必须且只能将其包裹在 `<cmd>` 和 `</cmd>` 标签内。例如：`<cmd>curl -s http://target/api/user</cmd>`
-3. 【绝对禁止只说不做 (Continuous Execution)】：严禁只汇报计划而不执行！只要目标未达成，你的每次回复**必须**包含一个 `<cmd>` 执行块去推进任务！不要询问人类“是否继续”、“我将要执行XX”，请直接执行！
-4. 任务挂起：只有当你真正需要人类输入（如验证码）、或者整体目标已彻底完成时，才能输出 `<done></done>`。只要没有 `<done>` 或 `<cmd>`，系统都会认为你发生了故障。
+1. 身份和权限检查：
+   <cmd>whoami && id && groups</cmd>
+
+2. 目标系统识别：
+   <cmd>uname -a</cmd>
+
+3. 操作系统发行版：
+   <cmd>cat /etc/os-release 2>/dev/null || cat /etc/issue 2>/dev/null || lsb_release -a 2>/dev/null</cmd>
+
+4. 当前工作目录和文件列表：
+   <cmd>pwd && ls -la</cmd>
+
+5. Sudo权限检查（非阻塞式）：
+   <cmd>sudo -l 2>&1 | head -20</cmd>
+
+从上述输出推导：
+- 当前用户身份 (root/服务用户/普通用户)
+- 目标操作系统 (Debian/Ubuntu/CentOS/Alpine 等)
+- 可用的本地提权向量
+- 系统中可用的渗透工具
+
+【第二阶段：漏洞风险评估】
+基于第一阶段的侦察结果，选择合适的攻击路径：
+- 如果已是 root → 转向持久化或横向移动阶段
+- 如果是普通用户 → 评估本地提权 (内核漏洞、SUID二进制文件、sudo 错误配置)
+- 如果是服务用户 (www-data, mysql等) → 寻找特定服务漏洞或沙箱逃逸
+
+【第三阶段：目标化渗透执行】
+仅执行基于第二阶段评估验证过的渗透步骤。
+
+【关键执行纪律】
+1. 【错误处理】:
+   - "Permission denied" → 该路径需要提权；尝试替代方案
+   - "command not found" → 使用替代工具 (which/whereis/type/find)
+   - "Connection refused" → 服务未运行；切换到下个目标
+   - Exit code > 0 → 命令执行失败；分析错误信息并调整
+
+2. 【回显管理】:
+   - 输出 > 3000 字符 → 用 grep/awk/sed/jq 提取关键信息
+   - 不要粘贴完整的 /proc 或 /sys 文件 → 必须通过管道过滤
+   - 超时限制：如果命令执行 > 15秒，取消并尝试更快的替代方案
+
+3. 【状态追踪】:
+   在每个重要阶段完成后，用特殊命令标记进度：
+   <cmd>echo "=== 状态: 用户=$(whoami) | 阶段=侦察 | 状态=完成 ==="</cmd>
+
+4. 【死循环防止】:
+   - 禁止：连续执行同一命令 3 次以上
+   - 禁止：重复尝试失败的提权方案超过 2 次
+   - 行动：如果陷入死局 → 立即输出 <done></done> 并请求人类干预
+
+【推演与行动格式】
+每次回复都严格遵循以下结构：
+
+【观察】: 分析最新终端输出。识别错误、成功标志、新信息。
+【评估】: 对比当前状态与阶段目标��刚才成功了什么/失败了什么？
+【计划】: 用一句话表述你的下一步战术举动。
+【执行】: 在 <cmd> 标签内运行具体命令。
+
+示例：
+【观察】: whoami=www-data，内核版本 5.10，sudo 被拒绝
+【评估】: 权限较低的 Web 用户，需要本地提权
+【计划】: 检查内核 CVE 可用性或 SUID 二进制文件
+【执行】:
+<cmd>find / -perm -4000 2>/dev/null | head -20</cmd>
+
+【任务挂起条件】
+仅在以下情况输出 <done></done>:
+   * 战术目标 100% 达成，或
+   * 需要人类输入解决验证码/手动决策，或
+   * 已尝试 2+ 个渗透方案都无进展（请求人类指导）
+
+【强制约束】
+- 永远不要假设；必须用命令验证
+- 永远不要执行破坏性命令（除非明确授权）
+- 优先侦察而非盲目渗透
+- 如果卡住 → 要求人类明确目标
 """
     }
 }
@@ -322,19 +449,19 @@ HTML_TEMPLATE = """
         ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
         ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
 
-        #sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid #18181b; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; z-index: 50; box-shadow: 4px 0 30px rgba(0,0,0,0.8);}
+        #sidebar { width: 280px; background: var(--bg-sidebar); border-right: 1px solid #18181b; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; z-index: 50; }
         #sidebar.collapsed { transform: translateX(-100%); position: absolute; height: 100%; }
         
         .sidebar-header { padding: 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #18181b; background: #050505;}
         .plus-btn { color: #71717a; cursor: pointer; transition: all 0.2s; background: #18181b; padding: 6px; border-radius: 6px; border: 1px solid #27272a;}
         .plus-btn:hover { color: var(--accent); border-color: var(--accent); background: rgba(14, 165, 233, 0.1); box-shadow: 0 0 10px var(--accent-glow);}
         
-        .session-item { padding: 12px 16px; margin: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #a1a1aa; transition: all 0.2s; border: 1px solid transparent; }
+        .session-item { padding: 12px 16px; margin: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #a1a1aa; border: 1px solid transparent; transition: all 0.2s; }
         .session-item:hover { background: #18181b; color: #f4f4f5; }
         .session-item.active { background: rgba(14, 165, 233, 0.1); color: var(--accent); border-color: rgba(14, 165, 233, 0.2); font-weight: 500;}
         .action-btns { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
         .session-item:hover .action-btns { opacity: 1; }
-        .rename-btn, .delete-btn { background: transparent; border: none; cursor: pointer; padding: 4px; border-radius: 4px; font-size: 0.9rem; transition: background 0.2s; display: flex; align-items: center; justify-content: center;}
+        .rename-btn, .delete-btn { background: transparent; border: none; cursor: pointer; padding: 4px; border-radius: 4px; font-size: 0.9rem; transition: background 0.2s; display: flex; align-items: center; }
         .rename-btn:hover { background: rgba(250, 204, 21, 0.2); color: #facc15; }
         .delete-btn:hover { background: rgba(248, 113, 113, 0.2); color: #f87171;}
         
@@ -346,7 +473,7 @@ HTML_TEMPLATE = """
         .bubble { max-width: 92%; padding: 16px 20px; font-size: 0.9rem; line-height: 1.6; word-wrap: break-word; }
         .bubble-user { align-self: flex-end; background: #18181b; color: #f4f4f5; border: 1px solid #27272a; border-radius: 12px 12px 2px 12px; }
         /* Agent 对话框优化 */
-        .bubble-agent { align-self: flex-start; background: rgba(14, 165, 233, 0.05); color: #e0f2fe; border: 1px solid rgba(14, 165, 233, 0.2); border-radius: 12px 12px 12px 2px; backdrop-filter: blur(8px);}
+        .bubble-agent { align-self: flex-start; background: rgba(14, 165, 233, 0.05); color: #e0f2fe; border: 1px solid rgba(14, 165, 233, 0.2); border-radius: 12px 12px 12px 2px; backdrop-filter: blur(10px); }
         
         /* 战术推演区块 (兼容 DeepSeek R1) */
         .agent-thought-block { 
@@ -357,7 +484,7 @@ HTML_TEMPLATE = """
             border-radius: 0 8px 8px 0;
             font-family: 'Inter', sans-serif;
         }
-        .thought-header { display: flex; align-items: center; gap: 6px; font-weight: 600; color: #0ea5e9; margin-bottom: 6px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;}
+        .thought-header { display: flex; align-items: center; gap: 6px; font-weight: 600; color: #0ea5e9; margin-bottom: 6px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
         
         /* 终端动作区块 */
         .agent-cmd-block { 
@@ -366,18 +493,18 @@ HTML_TEMPLATE = """
             border: 1px solid #27272a; border-left: 3px solid #f59e0b; 
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
-        .cmd-header { color: #f59e0b; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 4px; display: block; font-family: 'Inter', sans-serif; font-weight: 700; letter-spacing: 0.05em;}
+        .cmd-header { color: #f59e0b; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 4px; display: block; font-family: 'Inter', sans-serif; font-weight: 700; letter-spacing: 0.05em; }
         .cmd-content { color: #d4d4d8; }
         
-        .system-notice { align-self: center; font-size: 0.75rem; color: #71717a; margin: 12px 0; background: #0a0a0a; padding: 6px 16px; border-radius: 20px; border: 1px solid #18181b; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;}
+        .system-notice { align-self: center; font-size: 0.75rem; color: #71717a; margin: 12px 0; background: #0a0a0a; padding: 6px 16px; border-radius: 20px; border: 1px solid #18181b; text-transform: uppercase; }
         
         #terminal-section { flex: 1; background: #000000; display: flex; flex-direction: column; position: relative; z-index: 10;}
         #terminal-container { flex: 1; padding: 12px 16px; overflow: hidden; background: #000000; }
         .xterm .xterm-viewport { overflow-y: auto !important; }
         
-        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;}
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
         .modal.active { display: flex; opacity: 1;}
-        .modal-content { background: #0a0a0a; border: 1px solid #27272a; padding: 32px; border-radius: 12px; width: 380px; box-shadow: 0 25px 50px -12px rgba(0,0,0,1); transform: scale(0.95); transition: transform 0.2s;}
+        .modal-content { background: #0a0a0a; border: 1px solid #27272a; padding: 32px; border-radius: 12px; width: 380px; box-shadow: 0 25px 50px -12px rgba(0,0,0,1); transform: scale(0.95); transition: transform 0.2s; }
         .modal.active .modal-content { transform: scale(1); }
         .input-glow:focus-within { box-shadow: 0 0 0 1px var(--accent); border-color: var(--accent); }
     </style>
@@ -387,7 +514,7 @@ HTML_TEMPLATE = """
     <div id="sidebar">
         <div class="sidebar-header">
             <span class="text-[11px] font-bold text-zinc-500 uppercase tracking-[0.15em] flex items-center gap-2">
-                <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-2.856 0l-.17.17m0 0a2 2 0 112.828 2.828l-.17.17m0 0l2.828 2.828c.9.9.9 2.36 0 3.25s-2.36.9-3.25 0l-3.172-3.172a4 4 0 00-5.656 0l-1.097 1.097m0 0a2 2 0 00 2.828 2.828l1.097-1.097a4 4 0 015.656 0l3.172 3.172c.9.9 2.36.9 3.25 0 .9-.9.9-2.36 0-3.25l-2.828-2.828m0 0a2 2 0 112.828-2.828l.17.17"></path></svg>
                 {{sessions_label}}
             </span>
             <div class="plus-btn" onclick="showModal('{{new_task}}', '{{new_task_placeholder}}', '{{create}}')" title="New Operation">
@@ -417,7 +544,7 @@ HTML_TEMPLATE = """
         </div>
         <div class="p-5 bg-[#050505]/95 backdrop-blur-md border-t border-[#18181b] shrink-0">
             <div class="relative flex items-center">
-                <input type="text" id="userInput" placeholder="{{input_placeholder}}" class="w-full bg-[#0a0a0a] border border-[#27272a] rounded-lg py-3.5 pl-4 pr-14 text-sm text-zinc-200 focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/30 transition-all placeholder-zinc-700 shadow-inner" onkeypress="if(event.key === 'Enter') sendChatMessage()">
+                <input type="text" id="userInput" placeholder="{{input_placeholder}}" class="w-full bg-[#0a0a0a] border border-[#27272a] rounded-lg py-3.5 pl-4 pr-14 text-sm text-zinc-200 focus:outline-none focus:border-sky-500 transition-colors" onkeypress="if(event.key==='Enter') sendChatMessage()">
                 <button onclick="sendChatMessage()" class="absolute right-2.5 p-2 bg-sky-600 hover:bg-sky-500 text-white rounded-md transition-colors shadow-lg flex items-center justify-center">
                     <svg class="w-4 h-4 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path></svg>
                 </button>
@@ -428,8 +555,8 @@ HTML_TEMPLATE = """
     <div id="terminal-section">
         <div class="h-10 bg-[#0a0a0a] flex items-center px-4 border-b border-[#18181b] shrink-0 justify-between">
             <div class="flex items-center gap-4">
-                <div class="text-[11px] text-zinc-500 font-mono tracking-widest ml-1 bg-[#18181b] px-4 py-1.5 rounded-t-md border-t border-l border-r border-[#27272a] mt-2 opacity-90 flex items-center gap-2 shadow-[0_-2px_10px_rgba(0,0,0,0.5)]">
-                    <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                <div class="text-[11px] text-zinc-500 font-mono tracking-widest ml-1 bg-[#18181b] px-4 py-1.5 rounded-t-md border-t border-l border-r border-[#27272a] mt-2 opacity-90 flex items-center gap-2">
+                    <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h4m-4-8h4"></path></svg>
                     root@kali:~ {{pty_status}}
                 </div>
             </div>
@@ -443,11 +570,11 @@ HTML_TEMPLATE = """
             <h3 class="font-bold text-lg mb-1 text-zinc-100 uppercase tracking-widest" id="modalTitle">{{modal_title}}</h3>
             <p class="text-xs text-zinc-500 mb-6 font-mono">Initialize a new autonomous operation.</p>
             <div class="input-glow rounded-md border border-zinc-800 bg-[#050505] transition-all mb-8">
-                <input type="text" id="modalInput" class="w-full bg-transparent border-none px-4 py-3 text-sm text-zinc-200 focus:outline-none placeholder-zinc-700" autocomplete="off" onkeypress="if(event.key === 'Enter') document.getElementById('modalConfirmBtn').click()">
+                <input type="text" id="modalInput" class="w-full bg-transparent border-none px-4 py-3 text-sm text-zinc-200 focus:outline-none placeholder-zinc-700" autocomplete="off" onkeypress="if(event.key==='Enter') document.getElementById('modalConfirmBtn').click()">
             </div>
             <div class="flex justify-end gap-3">
                 <button onclick="closeModal()" class="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 rounded-md transition-colors">{{cancel}}</button>
-                <button id="modalConfirmBtn" class="px-6 py-2 text-xs font-bold uppercase tracking-wider bg-sky-600 hover:bg-sky-500 text-white rounded-md transition-all shadow-[0_0_15px_rgba(14,165,233,0.2)] hover:shadow-[0_0_20px_rgba(14,165,233,0.4)]">{{confirm}}</button>
+                <button id="modalConfirmBtn" class="px-6 py-2 text-xs font-bold uppercase tracking-wider bg-sky-600 hover:bg-sky-500 text-white rounded-md transition-all shadow-[0_0_15px_rgba(14,165,233,0.5)]">{{confirm}}</button>
             </div>
         </div>
     </div>
@@ -536,7 +663,7 @@ HTML_TEMPLATE = """
             
             // 原生解析 R1 OODA 推演过程标签
             formattedText = formattedText.replace(/&lt;think&gt;([\\s\\S]*?)&lt;\\/think&gt;/g, 
-                '<div class="agent-thought-block"><div class="thought-header"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> OODA Loop Deduction</div>$1</div>');
+                '<div class="agent-thought-block"><div class="thought-header"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>思考过程</div>$1</div>');
             
             // 解析 <cmd> 终端命令标签
             formattedText = formattedText.replace(/&lt;cmd&gt;([\\s\\S]*?)&lt;\\/cmd&gt;/g, 
@@ -544,7 +671,7 @@ HTML_TEMPLATE = """
             
             // 解析 <done> 标签
             formattedText = formattedText.replace(/&lt;done.*?&gt;/g, 
-                '<span class="inline-block mt-4 text-[10px] font-mono uppercase bg-emerald-900/40 text-emerald-400 px-3 py-1.5 rounded-sm border border-emerald-800/50 tracking-wider">✔️ Objective Concluded</span>');
+                '<span class="inline-block mt-4 text-[10px] font-mono uppercase bg-emerald-900/40 text-emerald-400 px-3 py-1.5 rounded-sm border border-emerald-800/50 tracking-wider">✔️ Objective Complete</span>');
 
             html += `<div class="font-medium tracking-wide whitespace-pre-wrap leading-relaxed">${formattedText}</div>`;
             html += `</div>`;
@@ -571,12 +698,12 @@ HTML_TEMPLATE = """
                 html += `
                     <div class="session-item group ${s.id === currentSessionId ? 'active' : ''}" onclick="switchSession('${s.id}')">
                         <div class="flex items-center gap-2.5 overflow-hidden flex-1">
-                            <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                            <svg class="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                             <span class="truncate tracking-wide">${safeTitle}</span>
                         </div>
                         <div class="action-btns shrink-0">
                             <button class="rename-btn text-zinc-500" onclick="renameSession('${s.id}', event)" title="Rename">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21H3v-3.5L16.732 3.732z"></path></svg>
                             </button>
                             <button class="delete-btn text-zinc-500" onclick="deleteSession('${s.id}', event)" title="Delete">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -591,7 +718,7 @@ HTML_TEMPLATE = """
             const session = sessionsData.find(s => s.id === id);
             if(session) {
                 currentSessionId = id; 
-                document.getElementById('currentSessionTitle').innerHTML = `<svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> ` + escapeHtml(session.title); 
+                document.getElementById('currentSessionTitle').innerHTML = `<svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>${escapeHtml(session.title)}`;
                 loadSessions(); 
                 connectChatWS(id); 
             }
@@ -611,7 +738,7 @@ HTML_TEMPLATE = """
                 });
                 if (res.ok) {
                     if (currentSessionId === id) {
-                        document.getElementById('currentSessionTitle').innerHTML = `<svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> ` + escapeHtml(newTitle.trim());
+                        document.getElementById('currentSessionTitle').innerHTML = `<svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>${escapeHtml(newTitle.trim())}`;
                     }
                     loadSessions();
                 }
@@ -647,7 +774,7 @@ HTML_TEMPLATE = """
                 if (currentSessionId === id) { 
                     currentSessionId = null; 
                     chatBox.innerHTML = '<div class="system-notice">{{sys_ready}}</div>'; 
-                    document.getElementById('currentSessionTitle').innerHTML = `<svg class="w-4 h-4 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> {{no_task}}`; 
+                    document.getElementById('currentSessionTitle').innerHTML = `<svg class="w-4 h-4 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>{{no_task}}`;
                     if(chatWs) chatWs.close();
                 } 
                 loadSessions(); 
@@ -739,6 +866,29 @@ async def terminal_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         global_pty.websockets.discard(websocket)
 
+class CommandTracker:
+    """Track command execution to prevent infinite loops"""
+    def __init__(self):
+        self.last_commands = []
+        self.failed_attempts = {}
+    
+    def add_command(self, cmd: str):
+        self.last_commands.append(cmd)
+        if len(self.last_commands) > 5:
+            self.last_commands.pop(0)
+    
+    def is_repeating(self, cmd: str) -> bool:
+        """Check if command has been run 3+ times recently"""
+        return self.last_commands.count(cmd) >= 3
+    
+    def track_failure(self, cmd: str):
+        """Track failed exploit attempts"""
+        self.failed_attempts[cmd] = self.failed_attempts.get(cmd, 0) + 1
+    
+    def is_exhausted(self, cmd: str) -> bool:
+        """Check if exploit has been tried 2+ times"""
+        return self.failed_attempts.get(cmd, 0) >= 2
+
 class HITLAgent:
     def __init__(self, websocket: WebSocket, session_id: str):
         self.ws = websocket
@@ -746,6 +896,8 @@ class HITLAgent:
         self.client = AsyncOpenAI(api_key=CONFIG["API_KEY"], base_url=CONFIG["BASE_URL"])
         self.memory = [{"role": "system", "content": T["system_prompt"]}]
         self.is_running = False
+        self.tracker = CommandTracker()
+        self.consecutive_no_cmd = 0
         self.load_history()
 
     def load_history(self):
@@ -766,15 +918,44 @@ class HITLAgent:
         with open(self.file_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(msg) + "\n")
 
+    def extract_command(self, reply_text: str) -> str:
+        """Extract command from <cmd>...</cmd> tags with validation"""
+        cmd_match = re.search(r'<cmd>(.*?)</cmd>', reply_text, re.DOTALL | re.IGNORECASE)
+        if not cmd_match:
+            return ""
+        cmd = cmd_match.group(1).strip()
+        # Remove any trailing newlines or semicolons that could cause issues
+        cmd = cmd.rstrip(';').strip()
+        return cmd
+
+    def check_command_validity(self, cmd: str) -> tuple[bool, str]:
+        """Validate command to prevent harmful patterns"""
+        if not cmd:
+            return True, ""  # Empty is ok - just means no action this round
+        
+        # Check for infinite loops
+        if self.tracker.is_repeating(cmd):
+            return False, "Command repetition detected - likely infinite loop"
+        
+        # Check for exhausted exploits
+        if self.tracker.is_exhausted(cmd):
+            return False, f"Exploit '{cmd}' has failed 2+ times already"
+        
+        return True, ""
+
     async def run_autonomous_loop(self):
         self.is_running = True
         consecutive_errors = 0
         self.consecutive_no_cmd = 0
+        max_iterations = 20  # Prevent infinite loops
 
         if not global_pty.connected:
             await global_pty.connect()
 
-        while self.is_running:
+        for iteration in range(max_iterations):
+            if not self.is_running:
+                break
+
             await self.ws.send_json({"type": "system", "content": T["backend_ai_thinking"]})
             try:
                 response = await self.client.chat.completions.create(
@@ -789,17 +970,17 @@ class HITLAgent:
                 consecutive_errors += 1
                 if consecutive_errors > 3:
                     self.is_running = False
+                    await self.ws.send_json({"type": "system", "content": f"[-] Max API errors reached: {str(e)}"})
                     break
                 await asyncio.sleep(2)
                 continue
 
             consecutive_errors = 0
             
-            # 使用正则提取 <cmd> 标签内的命令
-            cmd_match = re.search(r'<cmd>(.*?)</cmd>', reply_text, re.DOTALL | re.IGNORECASE)
-            cmd = cmd_match.group(1).strip() if cmd_match else ""
+            # Extract command
+            cmd = self.extract_command(reply_text)
             
-            # 检查是否有 <done> 标志
+            # Check if task is done
             is_done = bool(re.search(r'<done.*?>', reply_text, re.IGNORECASE))
 
             await self.ws.send_json({
@@ -807,33 +988,51 @@ class HITLAgent:
                 "text": reply_text
             })
 
-            # 如果任务结束，停止循环
+            # If task is done, stop
             if is_done:
                 await self.ws.send_json({"type": "system", "content": T["backend_task_done"]})
                 self.is_running = False
                 break
 
-            # 如果有命令，则执行
+            # Validate and execute command
             if cmd:
-                self.consecutive_no_cmd = 0
-                cmd_result = await global_pty.execute_agent_command(cmd)
+                is_valid, error_msg = self.check_command_validity(cmd)
                 
-                # 【核心框架优化】：扩充回显捕获极限至 20,000 字符，确保 OODA 循环输入完整
-                trunc_result = cmd_result[-20000:]
+                if not is_valid:
+                    # Send error and break loop
+                    await self.ws.send_json({"type": "system", "content": f"⚠️ {error_msg}"})
+                    self.is_running = False
+                    break
+                
+                self.consecutive_no_cmd = 0
+                self.tracker.add_command(cmd)
+                
+                cmd_result = await global_pty.execute_agent_command(cmd, max_wait=30)
+                
+                # Check if command failed (simple heuristic: contains error patterns)
+                if any(pattern in cmd_result.lower() for pattern in ["error", "failed", "denied", "not found", "cannot"]):
+                    self.tracker.track_failure(cmd)
+                
+                # Truncate result to avoid overwhelming the LLM
+                trunc_result = cmd_result[-15000:]
                 self.save_message("user", f"{T['screen_echo_prefix']}\n{trunc_result}\n{T['screen_echo_suffix']}")
                 await asyncio.sleep(1.5)
             else:
-                # 触发自动督导机制 (Auto-Nudge)
+                # No command - trigger auto-nudge or break
                 self.consecutive_no_cmd += 1
                 if self.consecutive_no_cmd >= 3:
                     await self.ws.send_json({"type": "system", "content": T["backend_action_end"]})
                     self.is_running = False
                     break
                 else:
-                    nudge_msg = "【System Auto-Nudge】: You reasoned but provided no <cmd> execution block. Please strictly follow [CONTINUOUS EXECUTION]. Execute your next step via <cmd>, or output <done></done> if waiting for human." if CONFIG["LANGUAGE"] == "en" else "【系统自动督导】: 你进行了推演但未下发任何 <cmd> 指令。请遵循「持续行动」法则，直接使用 <cmd> 执行你的下一步计划！若确实需人类介入请输出 <done></done>。"
+                    nudge_msg = "[AUTO-NUDGE] You provided reasoning but no <cmd> block. Strictly follow the format and execute your next step or output <done></done>."
                     self.save_message("user", nudge_msg)
-                    await self.ws.send_json({"type": "system", "content": "[-] 触发自动督导：鞭策 Agent 继续执行..."})
+                    await self.ws.send_json({"type": "system", "content": "⚠️ Auto-nudge: No command detected, forcing re-evaluation..."})
                     await asyncio.sleep(1)
+
+        if iteration >= max_iterations - 1:
+            await self.ws.send_json({"type": "system", "content": "[!] Max iterations reached. Operation suspended."})
+            self.is_running = False
 
 @app.get("/")
 async def get():
